@@ -6,7 +6,8 @@ use std::str::FromStr;
 #[derive(Parser)]
 #[command(author = "d4nilpzz", version = "1.0.0", about = "ipcalc - simple IPv4/CIDR calculator")]
 struct Args {
-    input: String,
+    ip: String,
+    netmask: Option<String>,
 }
 
 fn ipv4_to_u32(a: Ipv4Addr) -> u32 {
@@ -70,24 +71,29 @@ fn detect_class_and_priv(addr: Ipv4Addr) -> (String, bool) {
 
 fn main() {
     let args = Args::parse();
-    let parts: Vec<&str> = args.input.split('/').collect();
-    if parts.len() != 2 {
-        eprintln!("{}", "Invalid Format. Use: ipcalc x.x.x.x/(0-32)".red());
-        std::process::exit(1);
-    }
-    let ip = match Ipv4Addr::from_str(parts[0]) {
+
+    let ip = match Ipv4Addr::from_str(args.ip.split('/').next().unwrap()) {
         Ok(a) => a,
         Err(_) => {
             eprintln!("{}", "Invalid IP".red());
             std::process::exit(1);
         }
     };
-    let prefix: u8 = match parts[1].parse() {
-        Ok(p) if p <= 32 => p,
-        _ => {
-            eprintln!("{}", "Invalid prefix (0-32)".red());
+
+    let prefix: u8 = if args.ip.contains('/') {
+        args.ip.split('/').nth(1).unwrap().parse().unwrap_or_else(|_| {
+            eprintln!("{}", "Invalid CIDR prefix".red());
             std::process::exit(1);
-        }
+        })
+    } else if let Some(mask_str) = args.netmask {
+        let mask_ip = Ipv4Addr::from_str(&mask_str).unwrap_or_else(|_| {
+            eprintln!("{}", "Invalid netmask".red());
+            std::process::exit(1);
+        });
+        ipv4_to_u32(mask_ip).count_ones() as u8
+    } else {
+        eprintln!("{}", "You must provide /CIDR or netmask".red());
+        std::process::exit(1);
     };
 
     let ip_u = ipv4_to_u32(ip);
